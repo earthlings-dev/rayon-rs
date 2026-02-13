@@ -6,26 +6,23 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-rayon = { path = "../" }
-cgmath = "0.18"
-docopt = "1"
-fixedbitset = "0.5"
-glium = "0.36"
+rayon.workspace = true
+cgmath.workspace = true
+docopt.workspace = true
+fixedbitset.workspace = true
+glium.workspace = true
 rand.workspace = true
 rand_xorshift.workspace = true
-regex = "1"
-winit = "0.30"
-
-[dependencies.serde]
-version = "1.0.85"
-features = ["derive"]
+regex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+winit.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["processthreadsapi"] }
+winapi = { workspace = true, features = ["processthreadsapi"] }
 
 [dev-dependencies]
-doc-comment = "0.3"
-num = "0.4"
+doc-comment.workspace = true
+num.workspace = true

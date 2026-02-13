@@ -3,7 +3,7 @@
 use super::*;
 use crate::ThreadPoolBuilder;
 use rand::distr::StandardUniform;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
 fn quick_sort<T: PartialOrd + Send>(v: &mut [T]) {

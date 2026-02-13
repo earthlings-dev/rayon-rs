@@ -22,7 +22,7 @@ web_spin_lock = ["dep:wasm_sync", "rayon-core/web_spin_lock"]
 
 [dependencies]
 # These are both public dependencies!
-rayon-core = { version = "1.13.0", path = "rayon-core" }
+rayon-core = { workspace = true }
 either.workspace = true
 
 wasm_sync = { workspace = true, optional = true }
@@ -38,20 +38,34 @@ exclude = ["ci"]
 
 [workspace.package]
 readme = "README.md"
-rust-version = "1.80"
-edition = "2021"
+rust-version = "1.93.0"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rayon-rs/rayon"
 keywords = ["parallel", "thread", "concurrency", "join", "performance"]
 categories = ["concurrency"]
 
-# Some dependencies may not be their latest version, in order to support older rustc.
 [workspace.dependencies]
-crossbeam-deque = "0.8.1"
-crossbeam-utils = "0.8.0"
+# Internal
+rayon = { path = "." }
+rayon-core = { version = "1.13.0", path = "rayon-core" }
+
+# External
+cgmath = "0.18"
+crossbeam-deque = "0.8.6"
+crossbeam-utils = "0.8.21"
+doc-comment = "0.3"
+docopt = "1"
 either = { version = "1", default-features = false }
+fixedbitset = "0.5"
+glium = "0.36"
 libc = "0.2"
-rand = "0.9"
-rand_xorshift = "0.4"
+num = "0.4"
+rand = { version = "0.10", path = "../rand" }
+rand_xorshift = { version = "0.5", path = "../rngs/rand_xorshift" }
+regex = "1"
 scoped-tls = "1.0"
-wasm_sync = "0.1.0"
+serde = { version = "1.0.228", features = ["derive"], path = "../serde/serde" }
+wasm_sync = "0.1.2"
+winapi = { version = "0.3", features = ["processthreadsapi"] }
+winit = "0.30"

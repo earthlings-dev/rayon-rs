@@ -23,8 +23,8 @@ pub struct Args {
 }
 
 use docopt::Docopt;
+use rand::RngExt;
 use rand::distr::StandardUniform;
-use rand::Rng;
 use std::time::Instant;
 
 pub trait Joiner {

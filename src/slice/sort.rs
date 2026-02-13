@@ -19,9 +19,9 @@ use core::mem::{self, MaybeUninit};
 use core::ptr;
 use core::slice;
 
+use crate::SendPtr;
 use crate::iter::{IndexedParallelIterator, ParallelIterator};
 use crate::slice::ParallelSliceMut;
-use crate::SendPtr;
 
 // When dropped, copies from `src` into `dest`.
 struct InsertionHole<T> {
@@ -884,14 +884,14 @@ where
         // If the chosen pivot is equal to the predecessor, then it's the smallest element in the
         // slice. Partition the slice into elements equal to and elements greater than the pivot.
         // This case is usually hit when the slice contains many duplicate elements.
-        if let Some(&mut ref p) = pred {
-            if !is_less(p, &v[pivot]) {
-                let mid = partition_equal(v, pivot, is_less);
+        if let Some(&mut ref p) = pred
+            && !is_less(p, &v[pivot])
+        {
+            let mid = partition_equal(v, pivot, is_less);
 
-                // Continue sorting elements greater than the pivot.
-                v = &mut v[mid..];
-                continue;
-            }
+            // Continue sorting elements greater than the pivot.
+            v = &mut v[mid..];
+            continue;
         }
 
         // Partition the slice.
@@ -1352,45 +1352,49 @@ where
     //
     // If `is_less` panics at any point during the merge process, `s` will get dropped and copy the
     // remaining parts of `left` and `right` into `dest`.
-    let mut s = State {
-        left_start: left.as_mut_ptr(),
-        left_end: left.as_mut_ptr().add(left_len),
-        right_start: right.as_mut_ptr(),
-        right_end: right.as_mut_ptr().add(right_len),
-        dest,
-    };
+    // SAFETY: all pointer arithmetic and dereferences below are valid per the function's
+    // safety contract — `dest` has enough space, and `left`/`right` are valid mutable slices.
+    unsafe {
+        let mut s = State {
+            left_start: left.as_mut_ptr(),
+            left_end: left.as_mut_ptr().add(left_len),
+            right_start: right.as_mut_ptr(),
+            right_end: right.as_mut_ptr().add(right_len),
+            dest,
+        };
 
-    if left_len == 0 || right_len == 0 || left_len + right_len < MAX_SEQUENTIAL {
-        while s.left_start < s.left_end && s.right_start < s.right_end {
-            // Consume the lesser side.
-            // If equal, prefer the left run to maintain stability.
-            let is_l = is_less(&*s.right_start, &*s.left_start);
-            let to_copy = if is_l { s.right_start } else { s.left_start };
-            ptr::copy_nonoverlapping(to_copy, s.dest, 1);
-            s.dest = s.dest.add(1);
-            s.right_start = s.right_start.add(is_l as usize);
-            s.left_start = s.left_start.add(!is_l as usize);
+        if left_len == 0 || right_len == 0 || left_len + right_len < MAX_SEQUENTIAL {
+            while s.left_start < s.left_end && s.right_start < s.right_end {
+                // Consume the lesser side.
+                // If equal, prefer the left run to maintain stability.
+                let is_l = is_less(&*s.right_start, &*s.left_start);
+                let to_copy = if is_l { s.right_start } else { s.left_start };
+                ptr::copy_nonoverlapping(to_copy, s.dest, 1);
+                s.dest = s.dest.add(1);
+                s.right_start = s.right_start.add(is_l as usize);
+                s.left_start = s.left_start.add(!is_l as usize);
+            }
+        } else {
+            // Function `split_for_merge` might panic. If that happens, `s` will get destructed
+            // and copy the whole `left` and `right` into `dest`.
+            let (left_mid, right_mid) = split_for_merge(left, right, is_less);
+            let (left_l, left_r) = left.split_at_mut(left_mid);
+            let (right_l, right_r) = right.split_at_mut(right_mid);
+
+            // Prevent the destructor of `s` from running. Rayon will ensure that both calls to
+            // `par_merge` happen. If one of the two calls panics, they will ensure that elements
+            // still get copied into `dest_left` and `dest_right`.
+            mem::forget(s);
+
+            // Wrap pointers in SendPtr so that they can be sent to another thread
+            // See the documentation of SendPtr for a full explanation
+            let dest_l = SendPtr(dest);
+            let dest_r = SendPtr(dest.add(left_l.len() + right_l.len()));
+            rayon_core::join(
+                move || par_merge(left_l, right_l, dest_l.get(), is_less),
+                move || par_merge(left_r, right_r, dest_r.get(), is_less),
+            );
         }
-    } else {
-        // Function `split_for_merge` might panic. If that happens, `s` will get destructed and copy
-        // the whole `left` and `right` into `dest`.
-        let (left_mid, right_mid) = split_for_merge(left, right, is_less);
-        let (left_l, left_r) = left.split_at_mut(left_mid);
-        let (right_l, right_r) = right.split_at_mut(right_mid);
-
-        // Prevent the destructor of `s` from running. Rayon will ensure that both calls to
-        // `par_merge` happen. If one of the two calls panics, they will ensure that elements still
-        // get copied into `dest_left` and `dest_right``.
-        mem::forget(s);
-
-        // Wrap pointers in SendPtr so that they can be sent to another thread
-        // See the documentation of SendPtr for a full explanation
-        let dest_l = SendPtr(dest);
-        let dest_r = SendPtr(dest.add(left_l.len() + right_l.len()));
-        rayon_core::join(
-            move || par_merge(left_l, right_l, dest_l.get(), is_less),
-            move || par_merge(left_r, right_r, dest_r.get(), is_less),
-        );
     }
     // Finally, `s` gets dropped if we used sequential merge, thus copying the remaining elements
     // all at once.
@@ -1445,62 +1449,67 @@ unsafe fn merge_recurse<T, F>(
     let len = chunks.len();
     debug_assert!(len > 0);
 
-    // Base case of the algorithm.
-    // If only one chunk is remaining, there's no more work to split and merge.
-    if len == 1 {
-        if into_buf {
-            // Copy the chunk from `v` into `buf`.
-            let (start, end) = chunks[0];
-            let src = v.add(start);
-            let dest = buf.add(start);
-            ptr::copy_nonoverlapping(src, dest, end - start);
+    // SAFETY: all pointer arithmetic, copies, and slice construction below are valid per the
+    // function's safety contract — chunks are adjacent, `buf` is at least as long as `v`.
+    unsafe {
+        // Base case of the algorithm.
+        // If only one chunk is remaining, there's no more work to split and merge.
+        if len == 1 {
+            if into_buf {
+                // Copy the chunk from `v` into `buf`.
+                let (start, end) = chunks[0];
+                let src = v.add(start);
+                let dest = buf.add(start);
+                ptr::copy_nonoverlapping(src, dest, end - start);
+            }
+            return;
         }
-        return;
+
+        // Split the chunks into two halves.
+        let (start, _) = chunks[0];
+        let (mid, _) = chunks[len / 2];
+        let (_, end) = chunks[len - 1];
+        let (left, right) = chunks.split_at(len / 2);
+
+        // After recursive calls finish we'll have to merge chunks `(start, mid)` and
+        // `(mid, end)` from `src` into `dest`. If the current invocation has to store the
+        // result into `buf`, we'll merge chunks from `v` into `buf`, and vice versa.
+        //
+        // Recursive calls flip `into_buf` at each level of recursion. More concretely,
+        // `par_merge` merges chunks from `buf` into `v` at the first level, from `v` into `buf`
+        // at the second level etc.
+        let (src, dest) = if into_buf { (v, buf) } else { (buf, v) };
+
+        // Panic safety:
+        //
+        // If `is_less` panics at any point during the recursive calls, the destructor of `guard`
+        // will be executed, thus copying everything from `src` into `dest`. This way we ensure
+        // that all chunks are in fact copied into `dest`, even if the merge process doesn't
+        // finish.
+        let guard = MergeHole {
+            start: src.add(start),
+            end: src.add(end),
+            dest: dest.add(start),
+        };
+
+        // Wrap pointers in SendPtr so that they can be sent to another thread
+        // See the documentation of SendPtr for a full explanation
+        let v = SendPtr(v);
+        let buf = SendPtr(buf);
+        rayon_core::join(
+            move || merge_recurse(v.get(), buf.get(), left, !into_buf, is_less),
+            move || merge_recurse(v.get(), buf.get(), right, !into_buf, is_less),
+        );
+
+        // Everything went all right - recursive calls didn't panic.
+        // Forget the guard in order to prevent its destructor from running.
+        mem::forget(guard);
+
+        // Merge chunks `(start, mid)` and `(mid, end)` from `src` into `dest`.
+        let src_left = slice::from_raw_parts_mut(src.add(start), mid - start);
+        let src_right = slice::from_raw_parts_mut(src.add(mid), end - mid);
+        par_merge(src_left, src_right, dest.add(start), is_less);
     }
-
-    // Split the chunks into two halves.
-    let (start, _) = chunks[0];
-    let (mid, _) = chunks[len / 2];
-    let (_, end) = chunks[len - 1];
-    let (left, right) = chunks.split_at(len / 2);
-
-    // After recursive calls finish we'll have to merge chunks `(start, mid)` and `(mid, end)` from
-    // `src` into `dest`. If the current invocation has to store the result into `buf`, we'll
-    // merge chunks from `v` into `buf`, and vice versa.
-    //
-    // Recursive calls flip `into_buf` at each level of recursion. More concretely, `par_merge`
-    // merges chunks from `buf` into `v` at the first level, from `v` into `buf` at the second
-    // level etc.
-    let (src, dest) = if into_buf { (v, buf) } else { (buf, v) };
-
-    // Panic safety:
-    //
-    // If `is_less` panics at any point during the recursive calls, the destructor of `guard` will
-    // be executed, thus copying everything from `src` into `dest`. This way we ensure that all
-    // chunks are in fact copied into `dest`, even if the merge process doesn't finish.
-    let guard = MergeHole {
-        start: src.add(start),
-        end: src.add(end),
-        dest: dest.add(start),
-    };
-
-    // Wrap pointers in SendPtr so that they can be sent to another thread
-    // See the documentation of SendPtr for a full explanation
-    let v = SendPtr(v);
-    let buf = SendPtr(buf);
-    rayon_core::join(
-        move || merge_recurse(v.get(), buf.get(), left, !into_buf, is_less),
-        move || merge_recurse(v.get(), buf.get(), right, !into_buf, is_less),
-    );
-
-    // Everything went all right - recursive calls didn't panic.
-    // Forget the guard in order to prevent its destructor from running.
-    mem::forget(guard);
-
-    // Merge chunks `(start, mid)` and `(mid, end)` from `src` into `dest`.
-    let src_left = slice::from_raw_parts_mut(src.add(start), mid - start);
-    let src_right = slice::from_raw_parts_mut(src.add(mid), end - mid);
-    par_merge(src_left, src_right, dest.add(start), is_less);
 }
 
 /// Sorts `v` using merge sort in parallel.
@@ -1612,7 +1621,7 @@ mod tests {
     use super::heapsort;
     use super::split_for_merge;
     use rand::distr::Uniform;
-    use rand::{rng, Rng};
+    use rand::{RngExt, rng};
 
     #[test]
     fn test_heapsort() {
@@ -1652,9 +1661,11 @@ mod tests {
     fn test_split_for_merge() {
         fn check(left: &[u32], right: &[u32]) {
             let (l, r) = split_for_merge(left, right, &|&a, &b| a < b);
-            assert!(left[..l]
-                .iter()
-                .all(|&x| right[r..].iter().all(|&y| x <= y)));
+            assert!(
+                left[..l]
+                    .iter()
+                    .all(|&x| right[r..].iter().all(|&y| x <= y))
+            );
             assert!(right[..r].iter().all(|&x| left[l..].iter().all(|&y| x < y)));
         }
 

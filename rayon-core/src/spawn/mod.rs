@@ -81,7 +81,7 @@ where
     mem::forget(abort_guard);
 }
 
-unsafe fn spawn_job<F>(func: F, registry: &Arc<Registry>) -> JobRef
+fn spawn_job<F>(func: F, registry: &Arc<Registry>) -> JobRef
 where
     F: FnOnce() + Send + 'static,
 {
@@ -153,7 +153,8 @@ where
     // If we're in the pool, use our thread's private fifo for this thread to execute
     // in a locally-FIFO order.  Otherwise, just use the pool's global injector.
     match registry.current_thread() {
-        Some(worker) => worker.push_fifo(job_ref),
+        // SAFETY: the worker thread is valid for pushing FIFO jobs.
+        Some(worker) => unsafe { worker.push_fifo(job_ref) },
         None => registry.inject(job_ref),
     }
     mem::forget(abort_guard);

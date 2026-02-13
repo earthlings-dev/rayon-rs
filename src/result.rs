@@ -107,10 +107,10 @@ where
                     // We don't need a blocking `lock()`, as anybody
                     // else holding the lock will also be writing
                     // `Some(error)`, and then ours is irrelevant.
-                    if let Ok(mut guard) = saved.try_lock() {
-                        if guard.is_none() {
-                            *guard = Some(error);
-                        }
+                    if let Ok(mut guard) = saved.try_lock()
+                        && guard.is_none()
+                    {
+                        *guard = Some(error);
                     }
                     None
                 }

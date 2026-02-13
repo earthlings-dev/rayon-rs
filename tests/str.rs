@@ -1,5 +1,5 @@
 use rand::distr::StandardUniform;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use rayon::prelude::*;
 

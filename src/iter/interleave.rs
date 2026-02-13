@@ -200,7 +200,7 @@ where
             (!flag) as usize
         }
 
-        let even = index % 2 == 0;
+        let even = index.is_multiple_of(2);
         let idx = index >> 1;
 
         // desired split

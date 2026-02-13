@@ -55,13 +55,14 @@ impl JobRef {
     /// Returns an opaque handle that can be saved and compared,
     /// without making `JobRef` itself `Copy + Eq`.
     #[inline]
-    pub(super) fn id(&self) -> impl Eq {
+    pub(super) fn id(&self) -> impl Eq + use<> {
         (self.pointer, self.execute_fn)
     }
 
     #[inline]
     pub(super) unsafe fn execute(self) {
-        (self.execute_fn)(self.pointer)
+        // SAFETY: caller guarantees this job is valid and should be executed exactly once.
+        unsafe { (self.execute_fn)(self.pointer) }
     }
 }
 
@@ -95,7 +96,8 @@ where
     }
 
     pub(super) unsafe fn as_job_ref(&self) -> JobRef {
-        JobRef::new(self)
+        // SAFETY: caller guarantees `self` will outlive the returned `JobRef`.
+        unsafe { JobRef::new(self) }
     }
 
     pub(super) unsafe fn run_inline(self, stolen: bool) -> R {
@@ -114,12 +116,15 @@ where
     R: Send,
 {
     unsafe fn execute(this: *const ()) {
-        let this = &*(this as *const Self);
-        let abort = unwind::AbortIfPanic;
-        let func = (*this.func.get()).take().unwrap();
-        (*this.result.get()) = JobResult::call(func);
-        Latch::set(&this.latch);
-        mem::forget(abort);
+        // SAFETY: `this` points to a valid `StackJob` and this is called exactly once.
+        unsafe {
+            let this = &*(this as *const Self);
+            let abort = unwind::AbortIfPanic;
+            let func = (*this.func.get()).take().unwrap();
+            (*this.result.get()) = JobResult::call(func);
+            Latch::set(&this.latch);
+            mem::forget(abort);
+        }
     }
 }
 
@@ -148,7 +153,8 @@ where
     /// lifetimes, so it is up to you to ensure that this JobRef
     /// doesn't outlive any data that it closes over.
     pub(super) unsafe fn into_job_ref(self: Box<Self>) -> JobRef {
-        JobRef::new(Box::into_raw(self))
+        // SAFETY: caller guarantees the data outlives the `JobRef`.
+        unsafe { JobRef::new(Box::into_raw(self)) }
     }
 
     /// Creates a static `JobRef` from this job.
@@ -156,6 +162,7 @@ where
     where
         BODY: 'static,
     {
+        // SAFETY: `'static` bound ensures the data lives long enough.
         unsafe { self.into_job_ref() }
     }
 }
@@ -165,7 +172,8 @@ where
     BODY: FnOnce() + Send,
 {
     unsafe fn execute(this: *const ()) {
-        let this = Box::from_raw(this as *mut Self);
+        // SAFETY: `this` was created by `Box::into_raw` and is called exactly once.
+        let this = unsafe { Box::from_raw(this as *mut Self) };
         (this.job)();
     }
 }
@@ -191,7 +199,8 @@ where
     /// lifetimes, so it is up to you to ensure that this JobRef
     /// doesn't outlive any data that it closes over.
     pub(super) unsafe fn as_job_ref(this: &Arc<Self>) -> JobRef {
-        JobRef::new(Arc::into_raw(Arc::clone(this)))
+        // SAFETY: caller guarantees the data outlives the `JobRef`.
+        unsafe { JobRef::new(Arc::into_raw(Arc::clone(this))) }
     }
 
     /// Creates a static `JobRef` from this job.
@@ -199,6 +208,7 @@ where
     where
         BODY: 'static,
     {
+        // SAFETY: `'static` bound ensures the data lives long enough.
         unsafe { Self::as_job_ref(this) }
     }
 }
@@ -208,7 +218,8 @@ where
     BODY: Fn() + Send + Sync,
 {
     unsafe fn execute(this: *const ()) {
-        let this = Arc::from_raw(this as *mut Self);
+        // SAFETY: `this` was created by `Arc::into_raw` and each ref is called exactly once.
+        let this = unsafe { Arc::from_raw(this as *mut Self) };
         (this.job)();
     }
 }
@@ -251,19 +262,23 @@ impl JobFifo {
         // jobs in a thread's deque may be popped from the back (LIFO) or stolen from the front
         // (FIFO), but either way they will end up popping from the front of this queue.
         self.inner.push(job_ref);
-        JobRef::new(self)
+        // SAFETY: `self` outlives the returned `JobRef` (guaranteed by the caller).
+        unsafe { JobRef::new(self) }
     }
 }
 
 impl Job for JobFifo {
     unsafe fn execute(this: *const ()) {
         // We "execute" a queue by executing its first job, FIFO.
-        let this = &*(this as *const Self);
-        loop {
-            match this.inner.steal() {
-                Steal::Success(job_ref) => break job_ref.execute(),
-                Steal::Empty => panic!("FIFO is empty"),
-                Steal::Retry => {}
+        // SAFETY: `this` points to a valid `JobFifo`.
+        unsafe {
+            let this = &*(this as *const Self);
+            loop {
+                match this.inner.steal() {
+                    Steal::Success(job_ref) => break job_ref.execute(),
+                    Steal::Empty => panic!("FIFO is empty"),
+                    Steal::Retry => {}
+                }
             }
         }
     }

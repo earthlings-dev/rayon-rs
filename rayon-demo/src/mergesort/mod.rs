@@ -1,5 +1,5 @@
+use rand::RngExt;
 use rand::distr::StandardUniform;
-use rand::Rng;
 
 const USAGE: &str = "
 Usage: mergesort bench [--size N]
