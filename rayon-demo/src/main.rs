@@ -1,4 +1,4 @@
-#![cfg_attr(test, feature(test))]
+#![cfg_attr(bench, feature(test))]
 #![warn(rust_2018_idioms)]
 
 use std::{env, io, io::prelude::*, process::exit};
@@ -15,28 +15,28 @@ mod tsp;
 
 // these are not "full-fledged" benchmarks yet,
 // they only run with cargo bench
-#[cfg(test)]
+#[cfg(bench)]
 mod factorial;
-#[cfg(test)]
+#[cfg(bench)]
 mod fibonacci;
-#[cfg(test)]
+#[cfg(bench)]
 mod find;
-#[cfg(test)]
+#[cfg(bench)]
 mod join_microbench;
-#[cfg(test)]
+#[cfg(bench)]
 mod map_collect;
-#[cfg(test)]
+#[cfg(bench)]
 mod pythagoras;
-#[cfg(test)]
+#[cfg(bench)]
 mod sort;
-#[cfg(test)]
+#[cfg(bench)]
 mod str_split;
-#[cfg(test)]
+#[cfg(bench)]
 mod tree;
-#[cfg(test)]
+#[cfg(bench)]
 mod vec_collect;
 
-#[cfg(test)]
+#[cfg(bench)]
 extern crate test;
 
 const USAGE: &str = "

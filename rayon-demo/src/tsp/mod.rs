@@ -11,7 +11,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::time::Instant;
 
-#[cfg(test)]
+#[cfg(bench)]
 mod bench;
 mod graph;
 mod parser;

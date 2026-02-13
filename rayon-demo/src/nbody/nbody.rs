@@ -114,7 +114,7 @@ impl NBodyBenchmark {
         out_bodies
     }
 
-    #[cfg(test)]
+    #[cfg(bench)]
     pub fn tick_par_bridge(&mut self) -> &[Body] {
         let (in_bodies, out_bodies) = if (self.time & 1) == 0 {
             (&self.bodies.0, &mut self.bodies.1)

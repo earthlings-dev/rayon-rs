@@ -143,5 +143,5 @@ pub fn main(args: &[String]) {
     }
 }
 
-#[cfg(test)]
+#[cfg(bench)]
 mod bench;

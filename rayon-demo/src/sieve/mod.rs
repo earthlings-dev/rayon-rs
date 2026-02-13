@@ -36,7 +36,7 @@ pub struct Args {
     cmd_bench: bool,
 }
 
-#[cfg(test)]
+#[cfg(bench)]
 mod bench;
 
 use docopt::Docopt;

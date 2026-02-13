@@ -18,7 +18,6 @@ Options:
 use crate::cpu_time::{self, CpuMeasure};
 use rand::distr::StandardUniform;
 use rand::{RngExt, rng};
-use std::iter::repeat;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -26,7 +25,7 @@ use std::time::{Duration, Instant};
 use docopt::Docopt;
 use rayon::prelude::*;
 
-#[cfg(test)]
+#[cfg(bench)]
 mod bench;
 
 #[derive(serde::Deserialize)]
@@ -62,7 +61,7 @@ impl Board {
         born: Vec<usize>,
         survive: Vec<usize>,
     ) -> Board {
-        let new_board = repeat(false).take(rows * cols).collect();
+        let new_board = std::iter::repeat_n(false, rows * cols).collect();
 
         Board {
             board: new_board,

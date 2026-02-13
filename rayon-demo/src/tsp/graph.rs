@@ -1,5 +1,4 @@
 use fixedbitset::FixedBitSet;
-use std::iter;
 
 use super::weight::Weight;
 
@@ -16,8 +15,7 @@ impl Graph {
     pub fn new(num_nodes: usize) -> Graph {
         Graph {
             num_nodes,
-            weights: iter::repeat(Weight::max())
-                .take(num_nodes * num_nodes)
+            weights: std::iter::repeat_n(Weight::max(), num_nodes * num_nodes)
                 .collect(),
         }
     }
@@ -26,7 +24,7 @@ impl Graph {
         self.num_nodes
     }
 
-    pub fn all_nodes(&self) -> impl Iterator<Item = Node> {
+    pub fn all_nodes(&self) -> impl Iterator<Item = Node> + use<> {
         (0..self.num_nodes).map(Node::new)
     }
 

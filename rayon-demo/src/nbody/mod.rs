@@ -1,7 +1,7 @@
 use docopt::Docopt;
 use std::time::Instant;
 
-#[cfg(test)]
+#[cfg(bench)]
 mod bench;
 #[allow(clippy::module_inception)]
 mod nbody;
