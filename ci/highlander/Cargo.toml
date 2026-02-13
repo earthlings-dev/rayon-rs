@@ -10,8 +10,10 @@ publish = false
 
 [dependencies.alt-core]
 optional = false
+version = "0.0.0"
 path = "../alt-core"
 
 [dependencies.rayon-core]
 optional = false
+version = "1.13.0"
 path = "../../rayon-core"
