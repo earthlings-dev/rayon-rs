@@ -61,16 +61,19 @@ fixedbitset = "0.5"
 glium = "0.36"
 libc = "0.2"
 num = "0.4"
-rand = { version = "0.10", git = "https://github.com/earthlings-dev/rand.git" }
-rand_xorshift = { version = "0.5", git = "https://github.com/earthlings-dev/rngs.git" }
+rand = { version = "0.10" }
+rand_xorshift = { version = "0.5" }
 regex = "1"
 scoped-tls = "1.0"
-serde = { version = "1.0.228", features = ["derive"], git = "https://github.com/earthlings-dev/serde.git" }
+serde = { version = "1.0.228", features = ["derive"] }
 wasm_sync = "0.1.2"
 winapi = { version = "0.3", features = ["processthreadsapi"] }
 winit = "0.30"
 
 [patch.crates-io]
-serde = { git = "https://github.com/earthlings-dev/serde.git" }
-serde_core = { git = "https://github.com/earthlings-dev/serde.git" }
-serde_derive = { git = "https://github.com/earthlings-dev/serde.git" }
+serde = { path = "../serde/serde" }
+serde_core = { path = "../serde/serde_core" }
+serde_derive = { path = "../serde/serde_derive" }
+rand = { path = "../rand" }
+rand_core = { path = "../rand_core" }
+rand_xorshift = { path = "../rngs/rand_xorshift" }
